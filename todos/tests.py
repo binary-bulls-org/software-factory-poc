@@ -1,6 +1,8 @@
 from django.test import TestCase
 from django.db import connection
 from django.urls import reverse
+from datetime import timedelta
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 from .models import Todo
@@ -21,6 +23,10 @@ class TodoModelTests(TestCase):
         todo = Todo.objects.create(title="Test Todo")
         self.assertFalse(todo.done)
 
+    def test_todo_default_priority(self):
+        todo = Todo.objects.create(title="Test Todo")
+        self.assertEqual(todo.priority, "medium")
+
     def test_todo_str(self):
         todo = Todo(title="Buy groceries")
         self.assertEqual(str(todo), "Buy groceries")
@@ -30,6 +36,27 @@ class TodoModelTests(TestCase):
         todo2 = Todo.objects.create(title="Second")
         todos = list(Todo.objects.all())
         self.assertEqual(todos, [todo2, todo1])
+
+    def test_is_overdue_property(self):
+        today = timezone.localdate()
+        past_date = today - timedelta(days=1)
+        future_date = today + timedelta(days=1)
+
+        # 1. is_overdue is True for a not-done todo with a past due_date
+        todo_past = Todo.objects.create(title="Past", due_date=past_date, done=False)
+        self.assertTrue(todo_past.is_overdue)
+
+        # 2. is_overdue is False when done is True (even if past due_date)
+        todo_done_past = Todo.objects.create(title="Done Past", due_date=past_date, done=True)
+        self.assertFalse(todo_done_past.is_overdue)
+
+        # 3. is_overdue is False when due_date is None
+        todo_no_date = Todo.objects.create(title="No Date", due_date=None, done=False)
+        self.assertFalse(todo_no_date.is_overdue)
+
+        # 4. is_overdue is False when due_date is in the future
+        todo_future = Todo.objects.create(title="Future", due_date=future_date, done=False)
+        self.assertFalse(todo_future.is_overdue)
 
 
 class TodoApiTests(APITestCase):
@@ -45,7 +72,40 @@ class TodoApiTests(APITestCase):
         response = self.client.post(url, data, format='json')
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertFalse(response.data['done'])
+        self.assertEqual(response.data['priority'], 'medium')
         self.assertTrue(Todo.objects.filter(title="buy milk", done=False).exists())
+
+    def test_create_todo_with_priority_and_future_duedate(self):
+        url = reverse('todo-list')
+        future_date = timezone.localdate() + timedelta(days=1)
+        data = {
+            "title": "important task",
+            "priority": "high",
+            "due_date": future_date.isoformat()
+        }
+        response = self.client.post(url, data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data['priority'], 'high')
+        self.assertEqual(response.data['due_date'], future_date.isoformat())
+
+    def test_create_todo_invalid_priority(self):
+        url = reverse('todo-list')
+        data = {
+            "title": "invalid priority",
+            "priority": "urgent"
+        }
+        response = self.client.post(url, data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_create_todo_past_duedate(self):
+        url = reverse('todo-list')
+        past_date = timezone.localdate() - timedelta(days=1)
+        data = {
+            "title": "past due",
+            "due_date": past_date.isoformat()
+        }
+        response = self.client.post(url, data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_create_todo_invalid_title(self):
         url = reverse('todo-list')
@@ -102,4 +162,3 @@ class TodoIndexViewTests(TestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertTemplateUsed(response, 'todos/index.html')
         self.assertContains(response, 'Todo list')
-

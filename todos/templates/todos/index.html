@@ -2,20 +2,24 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Todo list</title>
     <style>
+        * {
+            box-sizing: border-box;
+        }
         body {
             font-family: system-ui, -apple-system, sans-serif;
             background-color: #f9f9f9;
             color: #333;
             margin: 0;
-            padding: 2rem;
+            padding: 1rem;
         }
         .container {
-            max-width: 480px;
+            max-width: 680px;
             margin: 0 auto;
             background: #fff;
-            padding: 1.5rem;
+            padding: 1.25rem;
             border-radius: 8px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
@@ -24,34 +28,51 @@
             font-size: 1.5rem;
         }
         .form-group {
-            display: flex;
-            flex-wrap: wrap;
+            display: grid;
+            grid-template-columns: 1fr;
             gap: 0.5rem;
-            margin-bottom: 1rem;
+            margin-bottom: 1.25rem;
+        }
+        @media (min-width: 540px) {
+            .form-group {
+                grid-template-columns: 1fr auto auto auto;
+                align-items: center;
+            }
         }
         input[type="text"] {
-            flex: 1;
-            min-width: 120px;
-            padding: 0.5rem;
+            width: 100%;
+            padding: 0.75rem;
             font-size: 1rem;
             border: 1px solid #ccc;
             border-radius: 4px;
         }
         select, input[type="date"] {
-            padding: 0.5rem;
+            width: 100%;
+            padding: 0.75rem;
             font-size: 1rem;
             border: 1px solid #ccc;
             border-radius: 4px;
             background: #fff;
         }
+        @media (min-width: 540px) {
+            select, input[type="date"] {
+                width: auto;
+            }
+        }
         button {
-            padding: 0.5rem 1rem;
+            padding: 0.75rem 1rem;
             font-size: 1rem;
             background-color: #0070f3;
             color: white;
             border: none;
             border-radius: 4px;
             cursor: pointer;
+            width: 100%;
+        }
+        @media (min-width: 540px) {
+            button {
+                width: auto;
+            }
         }
         button:hover {
             background-color: #0051cc;
@@ -60,19 +81,25 @@
             list-style: none;
             padding: 0;
             margin: 0;
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 0.75rem;
         }
         li {
             display: flex;
-            flex-wrap: wrap;
-            align-items: center;
-            justify-content: space-between;
-            padding: 0.5rem 0;
-            border-bottom: 1px solid #eee;
-            border-left: 4px solid transparent;
-            padding-left: 0.25rem;
+            flex-direction: column;
+            gap: 0.75rem;
+            padding: 1rem;
+            background: #fff;
+            border: 1px solid #e5e5e5;
+            border-left: 5px solid transparent;
+            border-radius: 6px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
         }
-        li:last-child {
-            border-bottom: none;
+        li:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
         }
         .todo-item {
             display: flex;
@@ -84,14 +111,20 @@
             flex: 1;
             min-width: 0;
         }
+        .todo-item input[type="checkbox"] {
+            width: 1.2rem;
+            height: 1.2rem;
+            cursor: pointer;
+        }
         .done span {
             text-decoration: line-through;
             color: #888;
         }
         .delete-btn {
             background-color: #e00;
-            padding: 0.25rem 0.5rem;
+            padding: 0.5rem 0.75rem;
             font-size: 0.875rem;
+            width: auto;
         }
         .delete-btn:hover {
             background-color: #c00;
@@ -100,13 +133,24 @@
             color: #666;
             text-align: center;
             padding: 1rem 0;
+            grid-column: 1 / -1;
+            background: none;
+            border: none;
+            box-shadow: none;
+        }
+        .empty-state:hover, .error-message:hover {
+            transform: none;
+            box-shadow: none;
         }
         .error-message {
             color: #d00;
+            background-color: #fce8e6;
+            border-radius: 4px;
+            padding: 0.75rem;
         }
         .badge {
             display: inline-block;
-            padding: 0.15rem 0.4rem;
+            padding: 0.2rem 0.5rem;
             font-size: 0.75rem;
             font-weight: 600;
             border-radius: 12px;
@@ -148,15 +192,24 @@
         .todo-actions {
             display: flex;
             align-items: center;
+            justify-content: space-between;
             gap: 0.5rem;
+            border-top: 1px solid #eee;
+            padding-top: 0.75rem;
+        }
+        .todo-actions select {
+            width: auto;
+            padding: 0.4rem 0.5rem;
+            font-size: 0.875rem;
         }
         .auth-bar {
             display: flex;
             align-items: center;
             gap: 0.75rem;
             justify-content: flex-end;
-            margin-bottom: 0.75rem;
+            margin-bottom: 1rem;
             font-size: 0.9rem;
+            flex-wrap: wrap;
         }
         .auth-bar a {
             color: #0070f3;
@@ -166,6 +219,7 @@
             background-color: #666;
             padding: 0.25rem 0.5rem;
             font-size: 0.875rem;
+            width: auto;
         }
         .logout-btn:hover {
             background-color: #444;
@@ -173,7 +227,7 @@
     </style>
 </head>
 <body>
-    <div class="container" style="max-width: 560px;">
+    <div class="container">
         <h1>Todo list</h1>
         <div class="auth-bar">
             {% if user.is_authenticated %}
@@ -492,7 +546,7 @@
                     method: 'DELETE',
                     headers: { 'X-CSRFToken': csrfToken },
                 });
-                if (!response.ok) throw new Error('Failed to delete todo.');
+                if (!response.ok) throw new Error('Failed to delete todo. Status: ' + response.status);
                 await fetchTodos();
             } catch (err) {
                 showError(err.message);

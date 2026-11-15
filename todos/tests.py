@@ -93,3 +93,13 @@ class TodoApiTests(APITestCase):
         url = reverse('todo-detail', args=[99999])
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+
+class TodoIndexViewTests(TestCase):
+    def test_index_view(self):
+        url = reverse('index')
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTemplateUsed(response, 'todos/index.html')
+        self.assertContains(response, 'Todo list')
+

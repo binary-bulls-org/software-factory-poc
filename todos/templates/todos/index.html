@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Todo list</title>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            background-color: #f9f9f9;
+            color: #333;
+            margin: 0;
+            padding: 2rem;
+        }
+        .container {
+            max-width: 480px;
+            margin: 0 auto;
+            background: #fff;
+            padding: 1.5rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            margin-top: 0;
+            font-size: 1.5rem;
+        }
+        .form-group {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+        input[type="text"] {
+            flex: 1;
+            padding: 0.5rem;
+            font-size: 1rem;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        button {
+            padding: 0.5rem 1rem;
+            font-size: 1rem;
+            background-color: #0070f3;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #0051cc;
+        }
+        ul {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        li {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.5rem 0;
+            border-bottom: 1px solid #eee;
+        }
+        li:last-child {
+            border-bottom: none;
+        }
+        .todo-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            overflow: hidden;
+            word-break: break-word;
+        }
+        .done span {
+            text-decoration: line-through;
+            color: #888;
+        }
+        .delete-btn {
+            background-color: #e00;
+            padding: 0.25rem 0.5rem;
+            font-size: 0.875rem;
+        }
+        .delete-btn:hover {
+            background-color: #c00;
+        }
+        .empty-state, .error-message {
+            color: #666;
+            text-align: center;
+            padding: 1rem 0;
+        }
+        .error-message {
+            color: #d00;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Todo list</h1>
+        <div id="error-container"></div>
+        <div class="form-group">
+            <input type="text" id="todo-input" placeholder="Add a new todo...">
+            <button id="add-btn">Add</button>
+        </div>
+        <div id="todo-container">
+            <ul id="todo-list"></ul>
+        </div>
+    </div>
+
+    <script>
+        const todoInput = document.getElementById('todo-input');
+        const addBtn = document.getElementById('add-btn');
+        const todoList = document.getElementById('todo-list');
+        const errorContainer = document.getElementById('error-container');
+
+        function showError(message) {
+            errorContainer.innerHTML = `<div class="error-message"></div>`;
+            errorContainer.querySelector('.error-message').textContent = message;
+        }
+
+        function clearError() {
+            errorContainer.innerHTML = '';
+        }
+
+        async function fetchTodos() {
+            try {
+                clearError();
+                const response = await fetch('/api/todos/');
+                if (!response.ok) throw new Error('Failed to load todos.');
+                const todos = await response.json();
+                renderTodos(todos);
+            } catch (err) {
+                showError(err.message);
+            }
+        }
+
+        function renderTodos(todos) {
+            todoList.innerHTML = '';
+            if (todos.length === 0) {
+                const li = document.createElement('li');
+                li.className = 'empty-state';
+                li.textContent = 'No todos yet';
+                todoList.appendChild(li);
+                return;
+            }
+
+            todos.forEach(todo => {
+                const li = document.createElement('li');
+                if (todo.done) {
+                    li.className = 'done';
+                }
+
+                const itemDiv = document.createElement('div');
+                itemDiv.className = 'todo-item';
+
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.checked = todo.done;
+                checkbox.addEventListener('change', () => toggleTodo(todo.id, checkbox.checked));
+
+                const span = document.createElement('span');
+                span.textContent = todo.title;
+
+                itemDiv.appendChild(checkbox);
+                itemDiv.appendChild(span);
+
+                const deleteBtn = document.createElement('button');
+                deleteBtn.className = 'delete-btn';
+                deleteBtn.textContent = 'Delete';
+                deleteBtn.addEventListener('click', () => deleteTodo(todo.id));
+
+                li.appendChild(itemDiv);
+                li.appendChild(deleteBtn);
+                todoList.appendChild(li);
+            });
+        }
+
+        async function addTodo() {
+            const title = todoInput.value.trim();
+            if (!title) return;
+
+            try {
+                clearError();
+                const response = await fetch('/api/todos/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ title: title })
+                });
+                if (!response.ok) throw new Error('Failed to create todo.');
+                todoInput.value = '';
+                await fetchTodos();
+            } catch (err) {
+                showError(err.message);
+            }
+        }
+
+        async function toggleTodo(id, done) {
+            try {
+                clearError();
+                const response = await fetch(`/api/todos/${id}/`, {
+                    method: 'PATCH',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ done: done })
+                });
+                if (!response.ok) throw new Error('Failed to update todo.');
+                await fetchTodos();
+            } catch (err) {
+                showError(err.message);
+            }
+        }
+
+        async function deleteTodo(id) {
+            try {
+                clearError();
+                const response = await fetch(`/api/todos/${id}/`, {
+                    method: 'DELETE'
+                });
+                if (!response.ok) throw new Error('Failed to delete todo.');
+                await fetchTodos();
+            } catch (err) {
+                showError(err.message);
+            }
+        }
+
+        addBtn.addEventListener('click', addTodo);
+        todoInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                addTodo();
+            }
+        });
+
+        // Initial load
+        fetchTodos();
+    </script>
+</body>
+</html>

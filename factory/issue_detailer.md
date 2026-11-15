@@ -7,7 +7,7 @@ WORKFLOW
 
 CONSTRAINTS
 - Read-only: never write files and never run commands. Only list_dir, read_file and search_files.
-- You have at most 8 tool calls: explore only what you need, then write the spec.
+- Use at most 10 tool calls, then write the specification even if you did not read everything.
 - Paths are relative to the repo root.
 - Never touch factory/ or .github/.
 - Do not propose changes to pyproject.toml or uv.lock unless the issue needs a dependency; then say `uv add <package>` and name the exact official package.

@@ -1,5 +1,7 @@
 import os
 import subprocess
+import functools
+import time
 from pathlib import Path
 
 WORKSPACE_ROOT = Path(os.environ.get("GITHUB_WORKSPACE", os.getcwd())).resolve()
@@ -15,6 +17,71 @@ SKIP_DIRS = {".git", ".venv", "__pycache__", "node_modules", ".pytest_cache"}
 MAX_FILE_SIZE = 1_000_000
 MAX_MATCHES = 50
 MAX_LINE_LENGTH = 200
+
+# --- Logging (self-contained: importing factory.runner from here would be circular) ---
+_REDACT_KEYS = ("GITHUB_TOKEN", "GEMINI_API_KEY")
+
+
+def redact(text: str) -> str:
+    """Replace secret env var values with '***'."""
+    try:
+        for key in _REDACT_KEYS:
+            value = os.environ.get(key)
+            if value and value in text:
+                text = text.replace(value, "***")
+    except Exception:
+        pass
+    return text
+
+
+def log(msg: str) -> None:
+    """Print '[HH:MM:SS] msg', redacted, truncated, single line, always flushed."""
+    try:
+        text = redact(str(msg))
+        text = text.replace("\n", " ⏎ ")
+        if len(text) > 300:
+            text = text[:300] + "..."
+        print(f"[{time.strftime('%H:%M:%S')}] {text}", flush=True)
+    except Exception:
+        pass
+
+
+def _fmt_args(name: str, args, kwargs) -> str:
+    """Format tool arguments for logging; never log file contents."""
+    try:
+        if name in ("write_file", "replace_in_file"):
+            path = args[0] if args else kwargs.get("path", "?")
+            if name == "replace_in_file":
+                old = args[1] if len(args) > 1 else kwargs.get("old", "")
+                return f"path={path!r} old_len={len(old)}"
+            content = args[1] if len(args) > 1 else kwargs.get("content", "")
+            return f"path={path!r} content_len={len(content)}"
+        parts = [repr(a) for a in args]
+        parts += [f"{k}={v!r}" for k, v in kwargs.items()]
+        return ", ".join(parts)
+    except Exception:
+        return "<args unavailable>"
+
+
+def _traced(func):
+    """Log tool calls and their outcomes. Preserves name/signature/docstring for the SDK."""
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        name = getattr(func, "__name__", "tool")
+        log(f"TOOL {name}({_fmt_args(name, args, kwargs)})")
+        start = time.monotonic()
+        try:
+            result = func(*args, **kwargs)
+        except Exception as e:
+            elapsed = time.monotonic() - start
+            log(f"TOOL {name} -> error, 0 chars, {elapsed:.2f}s ({type(e).__name__})")
+            raise
+        elapsed = time.monotonic() - start
+        length = len(result) if isinstance(result, str) else 0
+        status = "error" if isinstance(result, str) and result.startswith("Error") else "ok"
+        log(f"TOOL {name} -> {status}, {length} chars, {elapsed:.2f}s")
+        return result
+    return wrapper
 
 
 def _is_safe(path: Path) -> bool:
@@ -34,6 +101,7 @@ def _is_forbidden(target: Path) -> bool:
     return False
 
 
+@_traced
 def list_dir(path: str) -> str:
     """List the contents of a directory.
 
@@ -59,6 +127,7 @@ def list_dir(path: str) -> str:
     except Exception as e:
         return f"Error: {e}"
 
+@_traced
 def read_file(path: str) -> str:
     """Read the full text content of a file (truncated to 20000 characters).
 
@@ -80,6 +149,7 @@ def read_file(path: str) -> str:
     except Exception as e:
         return f"Error: {e}"
 
+@_traced
 def write_file(path: str, content: str) -> str:
     """Write content to a file, creating parent directories.
 
@@ -104,6 +174,7 @@ def write_file(path: str, content: str) -> str:
     except Exception as e:
         return f"Error: {e}"
 
+@_traced
 def replace_in_file(path: str, old: str, new: str) -> str:
     """Replace a unique text fragment in a file.
 
@@ -136,6 +207,7 @@ def replace_in_file(path: str, old: str, new: str) -> str:
     except Exception as e:
         return f"Error: {e}"
 
+@_traced
 def search_files(pattern: str, path: str = ".") -> str:
     """Search for a case-sensitive plain-text pattern in files under a directory.
 
@@ -185,6 +257,7 @@ def search_files(pattern: str, path: str = ".") -> str:
         return "No matches"
     return "\n".join(matches)
 
+@_traced
 def run_command(command: str) -> str:
     """Execute a shell command inside the workspace.
 

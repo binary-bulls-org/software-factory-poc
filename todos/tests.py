@@ -36,8 +36,8 @@ class TodoModelTests(TestCase):
         self.assertEqual(str(todo), "Buy groceries")
 
     def test_todo_ordering(self):
-        todo1 = Todo.objects.create(title="First", owner=self.user)
-        todo2 = Todo.objects.create(title="Second", owner=self.user)
+        todo1 = Todo.objects.create(title="First", owner=self.user, order=1)
+        todo2 = Todo.objects.create(title="Second", owner=self.user, order=0)
         todos = list(Todo.objects.filter(owner=self.user))
         self.assertEqual(todos, [todo2, todo1])
 
@@ -140,6 +140,14 @@ class TodoApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         todo.refresh_from_db()
         self.assertTrue(todo.done)
+
+    def test_patch_todo_order(self):
+        todo = Todo.objects.create(title="Test Todo", order=0, owner=self.user)
+        url = reverse('todo-detail', args=[todo.id])
+        response = self.client.patch(url, {"order": 5}, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        todo.refresh_from_db()
+        self.assertEqual(todo.order, 5)
 
     def test_put_todo(self):
         todo = Todo.objects.create(title="Old Title", done=False, owner=self.user)

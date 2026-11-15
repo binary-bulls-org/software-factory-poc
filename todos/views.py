@@ -12,7 +12,8 @@ class TodoViewSet(viewsets.ModelViewSet):
         return Todo.objects.filter(owner=self.request.user)
 
     def perform_create(self, serializer):
-        serializer.save(owner=self.request.user)
+        count = Todo.objects.filter(owner=self.request.user).count()
+        serializer.save(owner=self.request.user, order=count)
 
 
 @login_required

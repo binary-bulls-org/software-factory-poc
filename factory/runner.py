@@ -79,7 +79,7 @@ def main() -> None:
                 contents=user_msg,
                 config=types.GenerateContentConfig(
                     system_instruction=system_msg,
-                    tools=[tools.list_dir, tools.read_file, tools.write_file, tools.run_command],
+                    tools=[tools.list_dir, tools.read_file, tools.write_file, tools.replace_in_file, tools.search_files, tools.run_command],
                     automatic_function_calling=types.AutomaticFunctionCallingConfig(maximum_remote_calls=20)
                 )
             )
@@ -132,7 +132,23 @@ def main() -> None:
 
         if review.verdict == "PASS":
             branch_name = f"agent/issue-{issue.number}-{github_run_id}"
-            
+
+            # Collect changed lines of pyproject.toml for the PR body
+            pyproject_diff = run_git(["diff", "--cached", "HEAD", "--", "pyproject.toml"])
+            dep_lines = [
+                line for line in pyproject_diff.splitlines()
+                if (line.startswith("+") or line.startswith("-"))
+                and not line.startswith("+++") and not line.startswith("---")
+            ]
+
+            pr_body = f"Closes #{issue.number}\n\nStatus Review: `[PASS]`"
+            if dep_lines:
+                pr_body += (
+                    "\n\n### Dependency changes (review carefully)\n```diff\n"
+                    + "\n".join(dep_lines)
+                    + "\n```"
+                )
+
             # Use token for auth
             token = os.environ["GITHUB_TOKEN"]
             repo_url = f"https://x-access-token:{token}@github.com/{os.environ['GITHUB_REPOSITORY']}.git"
@@ -147,7 +163,7 @@ def main() -> None:
 
             pr = repo.create_pull(
                 title=f"Resolve #{issue.number}: {issue.title}",
-                body=f"Closes #{issue.number}\n\nStatus Review: `[PASS]`",
+                body=pr_body,
                 head=branch_name,
                 base=repo.default_branch,
             )

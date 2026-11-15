@@ -23,8 +23,10 @@ class Todo(models.Model):
         related_name="todos",
     )
 
+    order = models.IntegerField(default=0)
+
     class Meta:
-        ordering = ["-created_at", "-id"]
+        ordering = ["order", "-created_at", "-id"]
 
     def __str__(self):
         return self.title

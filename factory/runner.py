@@ -12,6 +12,17 @@ import factory.tools as tools
 
 MODEL = "gemini-3.5-flash-lite"
 
+# --- Narzędzia agentów (definiowane raz, wspólne dla implementera i detailera) ---
+DETAILER_TOOLS = [tools.list_dir, tools.read_file, tools.search_files]
+IMPLEMENTER_TOOLS = [
+    tools.list_dir,
+    tools.read_file,
+    tools.write_file,
+    tools.replace_in_file,
+    tools.search_files,
+    tools.run_command,
+]
+
 # --- Kontrakty JSON (Structured Outputs) ---
 class ReviewerResponse(BaseModel):
     verdict: Literal["PASS", "BLOCK"]
@@ -42,6 +53,42 @@ def call_with_retry(fn, *args, **kwargs):
             raise e
     raise Exception("Model call failed after retries")
 
+def run_detailer(issue, client, detail_prompt: str) -> str:
+    """Turn the issue into a precise spec and post it as a comment.
+
+    Returns the spec text. DailyQuotaError propagates so main() can abort.
+    Falls back to the raw issue text when the model returns no usable output.
+    """
+    user_msg = (
+        f"ISSUE #{issue.number}: {issue.title}\n\n"
+        f"OPIS:\n{issue.body or ''}"
+    )
+
+    response = call_with_retry(
+        client.models.generate_content,
+        model=MODEL,
+        contents=user_msg,
+        config=types.GenerateContentConfig(
+            system_instruction=detail_prompt,
+            tools=DETAILER_TOOLS,
+            automatic_function_calling=types.AutomaticFunctionCallingConfig(maximum_remote_calls=8)
+        )
+    )
+
+    spec = (response.text or "").strip()
+    if not spec:
+        issue.create_comment(
+            "⚠️ Detailer nie wygenerował specyfikacji — przechodzę do implementacji "
+            "na podstawie treści issue."
+        )
+        return f"{issue.title}\n\n{issue.body or ''}"
+
+    spec = spec[:60000]
+    issue.create_comment(
+        f"### 📋 Specyfikacja od issue detailera\n\n**{issue.title}**\n\n{spec}"
+    )
+    return spec
+
 def main() -> None:
     issue_number = int(os.environ["ISSUE_NUMBER"])
     gh = Github(os.environ["GITHUB_TOKEN"])
@@ -52,6 +99,7 @@ def main() -> None:
     client = genai.Client()
     impl_prompt = Path("factory/implementer.md").read_text(encoding="utf-8")
     rev_prompt = Path("factory/reviewer.md").read_text(encoding="utf-8")
+    detail_prompt = Path("factory/issue_detailer.md").read_text(encoding="utf-8")
 
     review_feedback = ""
     last_failure_reason = ""
@@ -59,6 +107,16 @@ def main() -> None:
 
     # Ensure repo is clean before starting
     run_git(["reset", "--hard", "HEAD"])
+
+    # Spec from the issue detailer (skipped when the issue is already detailed)
+    raw_issue_text = f"{issue.title}\n\n{issue.body or ''}"
+    detail_spec = raw_issue_text
+    if len(issue.body or "") <= 1500:
+        try:
+            detail_spec = run_detailer(issue, client, detail_prompt)
+        except DailyQuotaError:
+            issue.create_comment("⚠️ **Dzienny limit quota Gemini został wyczerpany.** Spróbuj ponownie później.")
+            return
 
     for attempt in range(1, max_attempts + 1):
         print(f"\n=== PRÓBA {attempt}/{max_attempts}: IMPLEMENTER ===")
@@ -68,6 +126,7 @@ def main() -> None:
             f"ISSUE #{issue.number}: {issue.title}\n\n"
             f"OPIS:\n{issue.body or ''}"
         )
+        user_msg += f"\n\nSPEC OD ISSUE DETAILERA (wynik analizy, orientacyjny):\n{detail_spec}"
         if review_feedback:
             user_msg += f"\n\nUWAGI Z CODE REVIEW (DO POPRAWY):\n{review_feedback}"
 
@@ -79,7 +138,7 @@ def main() -> None:
                 contents=user_msg,
                 config=types.GenerateContentConfig(
                     system_instruction=system_msg,
-                    tools=[tools.list_dir, tools.read_file, tools.write_file, tools.replace_in_file, tools.search_files, tools.run_command],
+                    tools=IMPLEMENTER_TOOLS,
                     automatic_function_calling=types.AutomaticFunctionCallingConfig(maximum_remote_calls=20)
                 )
             )
@@ -105,6 +164,7 @@ def main() -> None:
         rev_msg = (
             f"ISSUE #{issue.number}: {issue.title}\n\n"
             f"OPIS:\n{issue.body or ''}\n\n"
+            f"SPEC OD ISSUE DETAILERA (wynik analizy, orientacyjny):\n{detail_spec}\n\n"
             f"GIT DIFF:\n{git_diff}"
         )
 

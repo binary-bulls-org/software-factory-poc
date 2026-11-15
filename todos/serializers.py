@@ -8,8 +8,8 @@ class TodoSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Todo
-        fields = ['id', 'title', 'done', 'created_at', 'priority', 'due_date', 'is_overdue']
-        read_only_fields = ['id', 'created_at', 'is_overdue']
+        fields = ['id', 'title', 'done', 'created_at', 'priority', 'due_date', 'is_overdue', 'owner']
+        read_only_fields = ['id', 'created_at', 'is_overdue', 'owner']
 
     def validate_title(self, value):
         if not value or not str(value).strip():

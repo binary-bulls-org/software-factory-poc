@@ -1,4 +1,5 @@
 from django.db import models
+from django.conf import settings
 from django.utils import timezone
 
 
@@ -14,6 +15,13 @@ class Todo(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     priority = models.CharField(max_length=6, choices=PRIORITY_CHOICES, default="medium")
     due_date = models.DateField(null=True, blank=True)
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="todos",
+    )
 
     class Meta:
         ordering = ["-created_at", "-id"]

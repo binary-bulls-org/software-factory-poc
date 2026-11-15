@@ -150,12 +150,45 @@
             align-items: center;
             gap: 0.5rem;
         }
+        .auth-bar {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            justify-content: flex-end;
+            margin-bottom: 0.75rem;
+            font-size: 0.9rem;
+        }
+        .auth-bar a {
+            color: #0070f3;
+            text-decoration: none;
+        }
+        .logout-btn {
+            background-color: #666;
+            padding: 0.25rem 0.5rem;
+            font-size: 0.875rem;
+        }
+        .logout-btn:hover {
+            background-color: #444;
+        }
     </style>
 </head>
 <body>
     <div class="container" style="max-width: 560px;">
         <h1>Todo list</h1>
+        <div class="auth-bar">
+            {% if user.is_authenticated %}
+                <span>Logged in as <strong>{{ user.username }}</strong></span>
+                <form method="post" action="{% url 'logout' %}" style="display:inline;">
+                    {% csrf_token %}
+                    <button type="submit" class="logout-btn">Log out</button>
+                </form>
+            {% else %}
+                <a href="{% url 'login' %}">Log in</a>
+                <a href="{% url 'register' %}">Register</a>
+            {% endif %}
+        </div>
         <div id="error-container"></div>
+        {% csrf_token %}
         <div class="form-group">
             <input type="text" id="todo-input" placeholder="Add a new todo...">
             <select id="priority-input">
@@ -178,6 +211,15 @@
         const addBtn = document.getElementById('add-btn');
         const todoList = document.getElementById('todo-list');
         const errorContainer = document.getElementById('error-container');
+
+        // CSRF token for session-authenticated API calls
+        const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value
+            || document.cookie.split('; ').find(r => r.startsWith('csrftoken='))?.split('=')[1]
+            || '';
+        const JSON_HEADERS = {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrfToken,
+        };
 
         // Set min attribute on due date input to today's LOCAL date (YYYY-MM-DD)
         const today = new Date();
@@ -374,9 +416,7 @@
                 clearError();
                 const response = await fetch('/api/todos/', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
+                    headers: JSON_HEADERS,
                     body: JSON.stringify({ title: title, priority: priority, due_date: due_date })
                 });
                 if (!response.ok) {
@@ -402,9 +442,7 @@
                 clearError();
                 const response = await fetch(`/api/todos/${id}/`, {
                     method: 'PATCH',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
+                    headers: JSON_HEADERS,
                     body: JSON.stringify({ priority: priority })
                 });
                 if (!response.ok) {
@@ -429,9 +467,7 @@
                 clearError();
                 const response = await fetch(`/api/todos/${id}/`, {
                     method: 'PATCH',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
+                    headers: JSON_HEADERS,
                     body: JSON.stringify({ done: done })
                 });
                 if (!response.ok) {
@@ -453,7 +489,8 @@
             try {
                 clearError();
                 const response = await fetch(`/api/todos/${id}/`, {
-                    method: 'DELETE'
+                    method: 'DELETE',
+                    headers: { 'X-CSRFToken': csrfToken },
                 });
                 if (!response.ok) throw new Error('Failed to delete todo.');
                 await fetchTodos();
